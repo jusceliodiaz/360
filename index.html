@@ -1,0 +1,1115 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0E0D0B">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>WEEMO — Tour 360°</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-512.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,300..600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js" } }
+</script>
+<style>
+:root {
+  --ink: #0E0D0B;
+  --glass: rgba(16, 15, 13, .62);
+  --glass-strong: rgba(16, 15, 13, .86);
+  --line: rgba(255, 255, 255, .09);
+  --text: #F2EDE4;
+  --muted: rgba(242, 237, 228, .58);
+  --brass: #C9A46A;
+  --brass-hi: #E2C590;
+  --serif: "Fraunces", Georgia, serif;
+  --sans: "Manrope", system-ui, sans-serif;
+  --ease: cubic-bezier(.22, .8, .24, 1);
+  --gutter: max(16px, env(safe-area-inset-left));
+  --ipd: 400px;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--ink); color: var(--text); font-family: var(--sans); }
+body { overscroll-behavior: none; touch-action: none; user-select: none; -webkit-user-select: none; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+
+#stage { position: fixed; inset: 0; cursor: grab; }
+#stage.dragging { cursor: grabbing; }
+#stage.hovering { cursor: pointer; }
+#stage canvas { display: block; }
+
+/* Legibilidade das bordas, sem tocar o centro da imagem */
+.shade { position: fixed; left: 0; right: 0; pointer-events: none; z-index: 1; transition: opacity .6s var(--ease); }
+.shade.top { top: 0; height: 200px; background: linear-gradient(rgba(10,9,8,.66), rgba(10,9,8,.25) 55%, transparent); }
+.shade.bottom { bottom: 0; height: 240px; background: linear-gradient(transparent, rgba(10,9,8,.62)); }
+
+/* Barra de carregamento */
+#loadbar { position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 30; overflow: hidden; opacity: 0; transition: opacity .3s; }
+#loadbar.on { opacity: 1; }
+#loadbar::after { content: ""; position: absolute; inset: 0; width: 38%; background: linear-gradient(90deg, transparent, var(--brass-hi), transparent); animation: sweep 1.1s linear infinite; }
+@keyframes sweep { from { transform: translateX(-100%); } to { transform: translateX(280%); } }
+
+/* Marca + localização */
+.brand { text-shadow: 0 1px 14px rgba(0,0,0,.5); position: fixed; z-index: 5; top: max(20px, env(safe-area-inset-top)); left: var(--gutter); display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
+.brand-row { display: flex; align-items: center; gap: 12px; }
+.mark { font-family: var(--sans); font-weight: 700; font-size: 13px; letter-spacing: .42em; }
+.rule { width: 28px; height: 1px; background: var(--brass); }
+.sub { font-size: 11px; letter-spacing: .22em; text-transform: uppercase; color: var(--muted); }
+.where { display: flex; flex-direction: column; gap: 2px; }
+.where-group { font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--brass); }
+.where-name { font-family: var(--serif); font-style: italic; font-weight: 400; font-size: clamp(22px, 3.2vw, 34px); line-height: 1.05; font-variation-settings: "opsz" 120; }
+
+/* Legenda de entrada no ambiente */
+#caption { position: fixed; z-index: 4; left: 50%; top: 46%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; opacity: 0; }
+#caption.show { animation: caption 2.8s var(--ease) forwards; }
+#caption .cap-group { display: block; font-size: 11px; letter-spacing: .3em; text-transform: uppercase; color: var(--brass-hi); margin-bottom: 10px; }
+#caption .cap-name { font-family: var(--serif); font-style: italic; font-weight: 300; font-size: clamp(40px, 7vw, 88px); line-height: 1; font-variation-settings: "opsz" 144; text-shadow: 0 2px 30px rgba(0,0,0,.45); }
+@keyframes caption {
+  0% { opacity: 0; transform: translate(-50%, -38%); letter-spacing: .02em; }
+  22% { opacity: 1; transform: translate(-50%, -50%); }
+  70% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -56%); }
+}
+
+/* Dica inicial */
+#hint { position: fixed; z-index: 4; left: 50%; bottom: 200px; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-radius: 999px; background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid var(--line); font-size: 13px; color: var(--muted); pointer-events: none; transition: opacity .6s var(--ease); white-space: nowrap; }
+#hint svg { width: 18px; height: 18px; color: var(--brass); animation: nudge 2.4s ease-in-out infinite; }
+@keyframes nudge { 0%, 100% { transform: translateX(-4px); } 50% { transform: translateX(4px); } }
+#hint.gone { opacity: 0; }
+
+/* Controles */
+.controls { position: fixed; z-index: 6; right: var(--gutter); bottom: calc(env(safe-area-inset-bottom) + 172px); display: flex; flex-direction: column; gap: 10px; transition: bottom .5s var(--ease); }
+body.drawer-closed .controls { bottom: calc(env(safe-area-inset-bottom) + 24px); }
+.ctl { position: relative; width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid var(--line); transition: border-color .25s, background .25s, transform .25s var(--ease); }
+.ctl svg { width: 21px; height: 21px; }
+.ctl:hover { border-color: rgba(201,164,106,.6); }
+.ctl:active { transform: scale(.94); }
+.ctl.on { background: rgba(201,164,106,.18); border-color: var(--brass); color: var(--brass-hi); }
+.ctl.primary { width: auto; padding: 0 18px 0 14px; border-radius: 999px; display: flex; gap: 8px; background: var(--brass); color: #17130D; border-color: transparent; font-weight: 600; font-size: 14px; }
+.ctl.primary svg { width: 24px; height: 24px; }
+.ctl .tip { position: absolute; right: calc(100% + 10px); top: 50%; transform: translate(6px, -50%); white-space: nowrap; font-size: 12px; padding: 6px 10px; border-radius: 8px; background: var(--glass-strong); border: 1px solid var(--line); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s var(--ease); color: var(--text); font-weight: 500; }
+@media (hover: hover) { .ctl:hover .tip { opacity: 1; transform: translate(0, -50%); } }
+.touch-only, .ctl.primary.touch-only { display: none; }
+body.touch .touch-only { display: grid; }
+body.touch .ctl.primary.touch-only { display: flex; }
+
+/* Gaveta de ambientes */
+.drawer { position: fixed; z-index: 5; left: var(--gutter); right: calc(var(--gutter) + 64px); bottom: calc(env(safe-area-inset-bottom) + 18px); max-width: 980px; transition: transform .55s var(--ease), opacity .4s; }
+body.drawer-closed .drawer { transform: translateY(calc(100% + 30px)); opacity: 0; pointer-events: none; }
+.tabs { display: flex; gap: 4px; margin-bottom: 10px; overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar, .strip::-webkit-scrollbar { display: none; }
+.tab { flex: none; padding: 7px 13px; border-radius: 999px; font-size: 12px; font-weight: 600; letter-spacing: .06em; color: var(--muted); border: 1px solid transparent; transition: color .2s, border-color .2s, background .2s; }
+.tab:hover { color: var(--text); }
+.tab[aria-selected="true"] { color: var(--text); border-color: var(--line); background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+.tab .count { color: var(--brass); margin-left: 6px; font-weight: 500; }
+.strip { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; padding: 2px; }
+.card { flex: none; width: 176px; scroll-snap-align: start; text-align: left; border-radius: 12px; overflow: hidden; background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid var(--line); transition: transform .35s var(--ease), border-color .25s; animation: rise .5s var(--ease) both; }
+.card:nth-child(2) { animation-delay: .04s; } .card:nth-child(3) { animation-delay: .08s; } .card:nth-child(4) { animation-delay: .12s; } .card:nth-child(5) { animation-delay: .16s; }
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } }
+.card:hover { transform: translateY(-3px); border-color: rgba(201,164,106,.5); }
+.card img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; filter: saturate(.92); transition: filter .3s; }
+.card:hover img { filter: saturate(1.05); }
+.card .meta { display: flex; align-items: baseline; gap: 8px; padding: 8px 11px 10px; }
+.card .num { font-family: var(--serif); font-style: italic; font-size: 15px; color: var(--brass); }
+.card .nm { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card.current { border-color: var(--brass); }
+
+/* Transição */
+#fade { position: fixed; inset: 0; z-index: 20; background: #000; opacity: 1; pointer-events: none; transition: opacity .32s ease; }
+#fade.clear { opacity: 0; }
+
+#toast { position: fixed; z-index: 40; left: 50%; top: max(20px, env(safe-area-inset-top)); transform: translate(-50%, -12px); padding: 10px 16px; border-radius: 10px; background: var(--glass-strong); border: 1px solid var(--line); font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .3s, transform .3s var(--ease); max-width: calc(100vw - 32px); }
+#toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* ===== Modo VR ===== */
+body.vr .brand, body.vr .controls, body.vr .drawer, body.vr #hint, body.vr #caption, body.vr .shade, body.vr #editor { display: none !important; }
+body.vr #stage { cursor: none; }
+.vr-layer { position: fixed; inset: 0; z-index: 25; pointer-events: none; display: none; }
+body.vr .vr-layer { display: block; }
+.eye { position: absolute; top: 50%; width: calc(var(--ipd) * .78); transform: translate(-50%, -50%); text-align: center; }
+.eye.l { left: calc(50% - var(--ipd) / 2); }
+.eye.r { left: calc(50% + var(--ipd) / 2); }
+#vrIntro { transition: opacity .8s var(--ease); }
+#vrIntro.gone { opacity: 0; }
+#vrIntro .eye { padding: 22px 18px; border-radius: 18px; background: rgba(10,9,8,.78); border: 1px solid var(--line); }
+#vrIntro .n { font-family: var(--serif); font-style: italic; font-size: 54px; line-height: 1; color: var(--brass-hi); }
+#vrIntro .t1 { margin-top: 10px; font-weight: 600; font-size: 15px; }
+#vrIntro .t2 { margin-top: 10px; font-size: 12px; line-height: 1.5; color: var(--muted); }
+
+.sheet { position: fixed; z-index: 35; inset: 0; display: grid; place-items: center; background: rgba(8,7,6,.55); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); padding: 16px; }
+.sheet[hidden] { display: none; }
+.sheet .panel { width: min(420px, 100%); padding: 22px; border-radius: 18px; background: var(--glass-strong); border: 1px solid var(--line); display: grid; gap: 10px; }
+.sheet h2 { margin: 0 0 4px; font-family: var(--serif); font-style: italic; font-weight: 400; font-size: 26px; }
+.sheet p { margin: 0 0 6px; font-size: 13px; color: var(--muted); line-height: 1.5; }
+.btn { min-height: 46px; border-radius: 12px; padding: 0 16px; border: 1px solid var(--line); background: rgba(255,255,255,.04); font-weight: 600; font-size: 14px; }
+.btn.main { background: var(--brass); color: #17130D; border-color: transparent; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px; }
+.stepper { display: flex; align-items: center; gap: 6px; }
+.stepper button { width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255,255,255,.04); font-size: 20px; }
+.stepper output { min-width: 58px; text-align: center; font-variant-numeric: tabular-nums; color: var(--brass-hi); font-weight: 600; }
+#calib { place-items: end center; background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; pointer-events: none; }
+#calib .panel { pointer-events: auto; width: min(560px, 100%); grid-template-columns: 1fr 1fr; }
+#calib .panel > * { min-width: 0; }
+#calib h2, #calib p, #calib .full { grid-column: 1 / -1; }
+.guide { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(201,164,106,.55); display: none; }
+body.calibrating .guide { display: block; }
+.guide.l { left: calc(50% - var(--ipd) / 2); }
+.guide.r { left: calc(50% + var(--ipd) / 2); }
+
+#rotate { position: fixed; inset: 0; z-index: 36; display: none; place-items: center; text-align: center; background: var(--ink); padding: 24px; }
+#rotate svg { width: 64px; height: 64px; color: var(--brass); animation: tilt 2s var(--ease) infinite; }
+@keyframes tilt { 0%, 30% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
+#rotate p { font-family: var(--serif); font-style: italic; font-size: 24px; margin: 18px 0 0; }
+@media (orientation: portrait) { body.vr #rotate { display: grid; } }
+
+/* Editor (?edit=1) */
+#editor { position: fixed; z-index: 15; top: max(20px, env(safe-area-inset-top)); right: var(--gutter); width: 300px; max-height: calc(100vh - 220px); overflow: auto; padding: 16px; border-radius: 14px; background: var(--glass-strong); border: 1px solid var(--brass); font-size: 13px; display: grid; gap: 10px; user-select: text; -webkit-user-select: text; }
+#editor h3 { margin: 0; font-size: 12px; letter-spacing: .2em; text-transform: uppercase; color: var(--brass); }
+#editor .live { font-variant-numeric: tabular-nums; color: var(--muted); }
+#editor .btn { min-height: 38px; font-size: 13px; }
+#editor ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+#editor li { display: flex; justify-content: space-between; gap: 8px; padding: 6px 8px; border-radius: 8px; background: rgba(255,255,255,.04); }
+#editor li button { color: var(--brass-hi); font-size: 12px; }
+#editor select, #editor input { width: 100%; min-height: 36px; border-radius: 8px; border: 1px solid var(--line); background: #1a1815; color: var(--text); padding: 0 8px; font: inherit; }
+#editor .add { display: none; gap: 8px; padding: 10px; border-radius: 10px; border: 1px dashed var(--brass); }
+#editor .add.on { display: grid; }
+
+#fatal { position: fixed; inset: 0; z-index: 50; display: none; place-items: center; text-align: center; padding: 24px; background: var(--ink); }
+#fatal.on { display: grid; }
+#fatal h2 { font-family: var(--serif); font-style: italic; font-weight: 400; font-size: 30px; margin: 0 0 8px; }
+#fatal p { color: var(--muted); max-width: 440px; line-height: 1.5; }
+
+@media (max-width: 640px) {
+  .drawer { right: var(--gutter); }
+  .controls { bottom: calc(env(safe-area-inset-bottom) + 176px); }
+  .card { width: 148px; }
+  #hint { bottom: 250px; }
+  #editor { left: var(--gutter); width: auto; max-height: 45vh; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+</style>
+</head>
+<body class="drawer-closed">
+<div id="stage" aria-label="Visualizador 360°"></div>
+<div class="shade top"></div>
+<div class="shade bottom"></div>
+<div id="loadbar"></div>
+
+<header class="brand">
+  <div class="brand-row"><span class="mark" id="mark">WEEMO</span><span class="rule"></span><span class="sub" id="sub">Tour 360°</span></div>
+  <div class="where"><span class="where-group" id="whereGroup"></span><span class="where-name" id="whereName"></span></div>
+</header>
+
+<div id="caption" aria-hidden="true"><span class="cap-group"></span><span class="cap-name"></span></div>
+
+<div id="hint">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8l-4 4 4 4M17 8l4 4-4 4M3 12h18"/></svg>
+  <span id="hintText">Arraste para explorar</span>
+</div>
+
+<div class="controls">
+  <button class="ctl primary touch-only" id="btnVR" aria-label="Ver em VR">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h15A1.5 1.5 0 0 1 21 8.5v7a1.5 1.5 0 0 1-1.5 1.5h-4.2l-1.9-2.6a1.7 1.7 0 0 0-2.8 0L8.7 17H4.5A1.5 1.5 0 0 1 3 15.5z"/><circle cx="8" cy="11.6" r="1.8"/><circle cx="16" cy="11.6" r="1.8"/></svg>
+    Ver em VR
+  </button>
+  <button class="ctl touch-only" id="btnGyro" aria-label="Giroscópio">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="8" y="4" width="8" height="16" rx="2"/><path d="M4.5 8.5a8 8 0 0 0 0 7M19.5 8.5a8 8 0 0 1 0 7"/></svg>
+    <span class="tip">Mover o celular</span>
+  </button>
+  <button class="ctl" id="btnRooms" aria-label="Ambientes" aria-expanded="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>
+    <span class="tip">Ambientes</span>
+  </button>
+  <button class="ctl" id="btnFs" aria-label="Tela cheia">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 9V5a1 1 0 0 1 1-1h4M20 9V5a1 1 0 0 0-1-1h-4M4 15v4a1 1 0 0 0 1 1h4M20 15v4a1 1 0 0 1-1 1h-4"/></svg>
+    <span class="tip">Tela cheia</span>
+  </button>
+</div>
+
+<nav class="drawer" id="drawer" aria-label="Ambientes">
+  <div class="tabs" id="tabs" role="tablist"></div>
+  <div class="strip" id="strip"></div>
+</nav>
+
+<!-- Camada exibida dentro do óculos -->
+<div class="vr-layer">
+  <div class="guide l"></div><div class="guide r"></div>
+  <div id="vrIntro">
+    <div class="eye l"><div class="n">5</div><div class="t1">Encaixe o celular no óculos</div><div class="t2">Olhe para uma seta por um instante para ir até lá.<br>Olhe para baixo para ver todos os ambientes.</div></div>
+    <div class="eye r"><div class="n">5</div><div class="t1">Encaixe o celular no óculos</div><div class="t2">Olhe para uma seta por um instante para ir até lá.<br>Olhe para baixo para ver todos os ambientes.</div></div>
+  </div>
+</div>
+
+<div class="sheet" id="vrMenu" hidden>
+  <div class="panel">
+    <h2>Modo VR pausado</h2>
+    <p>Toque em “Voltar ao VR” e encaixe o celular no óculos novamente.</p>
+    <button class="btn main" id="vrResume">Voltar ao VR</button>
+    <button class="btn" id="vrCalib">Ajustar óculos</button>
+    <button class="btn" id="vrExit">Sair do VR</button>
+  </div>
+</div>
+
+<div class="sheet" id="calib" hidden>
+  <div class="panel">
+    <h2>Ajustar óculos</h2>
+    <p>Olhe pelas lentes. As linhas douradas devem cair no centro de cada lente e as duas imagens devem se fundir numa só.</p>
+    <div class="row full"><span>Distância entre lentes</span><span class="stepper"><button data-k="ipd" data-d="-4">−</button><output id="oIpd"></output><button data-k="ipd" data-d="4">+</button></span></div>
+    <div class="row full"><span>Campo de visão</span><span class="stepper"><button data-k="fov" data-d="-5">−</button><output id="oFov"></output><button data-k="fov" data-d="5">+</button></span></div>
+    <div class="row full"><span>Correção da lente</span><span class="stepper"><button data-k="k1" data-d="-0.04">−</button><output id="oK1"></output><button data-k="k1" data-d="0.04">+</button></span></div>
+    <button class="btn" id="calReset">Restaurar padrão</button>
+    <button class="btn main" id="calDone">Pronto</button>
+  </div>
+</div>
+
+<div id="rotate">
+  <div>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="8" y="3" width="8" height="18" rx="2"/><path d="M11 18h2"/></svg>
+    <p>Gire o celular na horizontal</p>
+  </div>
+</div>
+
+<div id="fade"></div>
+<div id="toast" role="status"></div>
+<div id="fatal"><div><h2>Não foi possível abrir o tour</h2><p id="fatalMsg"></p></div></div>
+
+<script type="module">
+import * as THREE from 'three';
+
+/* ---------- Constantes e estado ---------- */
+const D = THREE.MathUtils.DEG2RAD;
+const $ = (s) => document.querySelector(s);
+const params = new URLSearchParams(location.search);
+const EDIT = params.has('edit');
+const isTouch = matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0 && !matchMedia('(pointer: fine)').matches;
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const DWELL_MS = 1500;
+const HOTSPOT_R = 400;
+const MENU_R = 12;
+const VR_DEFAULTS = { ipd: 400, fov: 95, k1: 0.2 };   // ipd em px CSS (1 px CSS ≈ 0,159 mm no Android → ~63 mm)
+if (isTouch) document.body.classList.add('touch');
+
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+  del(k) { try { localStorage.removeItem(k); } catch {} },
+};
+
+const view = { yaw: 0, pitch: 0, fov: isTouch ? 80 : 75, vYaw: 0, vPitch: 0, lastInput: performance.now() };
+const gyro = { on: false, has: false, alpha: 0, beta: 0, gamma: 0, offset: 0, recenter: false };
+const vr = { on: false, ...VR_DEFAULTS, ...store.get('vrCalib', {}) };
+
+/* ---------- Tour ---------- */
+let tour;
+try {
+  const draft = EDIT ? store.get('tourDraft', null) : null;
+  tour = draft ?? await (await fetch('tour.json', { cache: 'no-cache' })).json();
+  if (draft) setTimeout(() => toast('Rascunho do editor carregado'), 600);
+} catch (e) {
+  $('#fatalMsg').textContent = location.protocol === 'file:'
+    ? 'Abra a página por um servidor (ex.: npx serve) e não diretamente pelo arquivo.'
+    : 'O arquivo tour.json não pôde ser lido.';
+  $('#fatal').classList.add('on');
+  throw e;
+}
+const byId = new Map(tour.scenes.map((s) => [s.id, s]));
+const groupName = (gid) => tour.groups.find((g) => g.id === gid)?.name ?? '';
+const numOf = (s) => s.id.split('-')[0];
+$('#mark').textContent = tour.title;
+$('#sub').textContent = tour.subtitle ?? 'Tour 360°';
+
+/* ---------- Three.js ---------- */
+const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+$('#stage').appendChild(renderer.domElement);
+const maxTex = renderer.capabilities.maxTextureSize;
+const useHiRes = !isTouch && maxTex >= 8192;
+const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+
+const world = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(view.fov, innerWidth / innerHeight, 0.1, 1100);
+world.add(camera);
+
+const panoGeo = new THREE.SphereGeometry(500, 96, 48);
+panoGeo.scale(-1, 1, 1);
+const panoMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+const pano = new THREE.Mesh(panoGeo, panoMat);
+pano.rotation.y = -Math.PI / 2;       // yaw 0 = centro da imagem
+world.add(pano);
+
+// yaw: graus para a direita, pitch: graus para cima
+const dirFrom = (yaw, pitch, r = 1) => new THREE.Vector3(
+  Math.sin(yaw * D) * Math.cos(pitch * D) * r, Math.sin(pitch * D) * r, -Math.cos(yaw * D) * Math.cos(pitch * D) * r);
+const yawPitchOf = (v) => ({ yaw: Math.atan2(v.x, -v.z) / D, pitch: Math.asin(THREE.MathUtils.clamp(v.y / v.length(), -1, 1)) / D });
+const wrap = (a) => ((a + 180) % 360 + 360) % 360 - 180;
+
+/* ---------- Texturas ---------- */
+const texLoader = new THREE.TextureLoader();
+function loadTex(url, mip = true) {
+  return new Promise((res, rej) => texLoader.load(url, (t) => {
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = aniso;
+    t.generateMipmaps = mip;
+    if (!mip) t.minFilter = THREE.LinearFilter;
+    res(t);
+  }, undefined, rej));
+}
+function setPanoTexture(t) {
+  renderer.initTexture(t);
+  const old = panoMat.map;
+  panoMat.map = t;
+  panoMat.needsUpdate = true;
+  old?.dispose();
+}
+function canvasTex(cv) {
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = aniso;
+  return t;
+}
+const loadImg = (src) => new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
+const BRASS = '#C9A46A', BRASS_HI = '#E2C590';
+
+await Promise.race([
+  Promise.all(['600 40px Manrope', 'italic 400 40px Fraunces'].map((f) => document.fonts.load(f))),
+  new Promise((r) => setTimeout(r, 2500)),
+]).catch(() => {});
+
+/* ---------- Hotspots ---------- */
+function ringCanvas() {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const g = c.getContext('2d');
+  g.beginPath(); g.arc(128, 128, 104, 0, Math.PI * 2); g.fillStyle = 'rgba(14,13,11,.55)'; g.fill();
+  g.lineWidth = 9; g.strokeStyle = BRASS; g.stroke();
+  g.beginPath(); g.arc(128, 128, 82, 0, Math.PI * 2); g.lineWidth = 2; g.strokeStyle = 'rgba(242,237,228,.35)'; g.stroke();
+  g.beginPath(); g.moveTo(92, 146); g.lineTo(128, 106); g.lineTo(164, 146);
+  g.lineWidth = 14; g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = '#F2EDE4'; g.stroke();
+  return c;
+}
+function haloCanvas() {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const g = c.getContext('2d');
+  g.beginPath(); g.arc(128, 128, 110, 0, Math.PI * 2); g.lineWidth = 5; g.strokeStyle = BRASS_HI; g.stroke();
+  return c;
+}
+function labelCanvas(text, sub) {
+  const c = document.createElement('canvas'); c.width = 640; c.height = 160;
+  const g = c.getContext('2d');
+  g.font = '600 46px Manrope';
+  const w = Math.min(600, g.measureText(text).width + 64);
+  const x = (640 - w) / 2;
+  g.fillStyle = 'rgba(14,13,11,.72)';
+  g.beginPath(); g.roundRect(x, 34, w, 84, 42); g.fill();
+  g.fillStyle = '#F2EDE4'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(text, 320, 78, 560);
+  if (sub) { g.font = '600 22px Manrope'; g.fillStyle = BRASS_HI; g.fillText(sub.toUpperCase(), 320, 14, 560); }
+  return c;
+}
+const ringTex = canvasTex(ringCanvas());
+const haloTex = canvasTex(haloCanvas());
+const spriteMat = (map) => new THREE.MeshBasicMaterial({ map, transparent: true, depthTest: false, depthWrite: false });
+const noRaycast = () => {};
+
+const hotspotLayer = new THREE.Group();
+world.add(hotspotLayer);
+let hotspotHits = [];
+
+function buildHotspots(scene) {
+  for (const o of [...hotspotLayer.children]) {
+    o.traverse((m) => { m.material?.map !== ringTex && m.material?.map !== haloTex && m.material?.map?.dispose(); m.material?.dispose(); m.geometry?.dispose(); });
+    hotspotLayer.remove(o);
+  }
+  hotspotHits = [];
+  scene.hotspots.forEach((h, i) => {
+    const dest = byId.get(h.to);
+    if (!dest) return;
+    const g = new THREE.Group();
+    g.position.copy(dirFrom(h.yaw, h.pitch, HOTSPOT_R));
+    g.lookAt(0, 0, 0);
+    const ring = new THREE.Mesh(new THREE.PlaneGeometry(52, 52), spriteMat(ringTex));
+    ring.renderOrder = 11;
+    ring.userData = { root: g, action: () => goTo(h.to), hotspotIndex: i };
+    const halo = new THREE.Mesh(new THREE.PlaneGeometry(52, 52), spriteMat(haloTex));
+    halo.renderOrder = 10; halo.raycast = noRaycast;
+    const sub = dest.group !== scene.group ? groupName(dest.group) : '';
+    const label = new THREE.Mesh(new THREE.PlaneGeometry(132, 33), spriteMat(canvasTex(labelCanvas(h.label || dest.name, sub))));
+    label.position.y = -46; label.renderOrder = 11; label.raycast = noRaycast;
+    g.add(halo, ring, label);
+    g.userData = { halo, ring, phase: i * 0.7, hover: 0 };
+    hotspotLayer.add(g);
+    hotspotHits.push(ring);
+  });
+}
+
+/* ---------- Menu no chão (VR) ---------- */
+const menu = new THREE.Group();
+menu.visible = false;
+world.add(menu);
+const menuPanels = [];
+let menuOpacity = 0;
+const nadirPivot = new THREE.Group();     // medalhão sempre legível de frente para quem olha
+menu.add(nadirPivot);
+
+async function buildMenu() {
+  const n = tour.scenes.length;
+  const pitch = -52;
+  const step = 360 / n;
+  const width = 2 * Math.PI * MENU_R * Math.cos(pitch * D) / n * 0.9;
+  await Promise.all(tour.scenes.map(async (s, i) => {
+    const img = await loadImg(`panos/${s.id}_thumb.jpg`).catch(() => null);
+    const c = document.createElement('canvas'); c.width = 512; c.height = 400;
+    const g = c.getContext('2d');
+    g.save(); g.beginPath(); g.roundRect(0, 0, 512, 400, 28); g.clip();
+    g.fillStyle = '#16140F'; g.fillRect(0, 0, 512, 400);
+    if (img) g.drawImage(img, 0, 0, 512, 288);
+    g.restore();
+    g.fillStyle = BRASS; g.font = 'italic 400 46px Fraunces'; g.textBaseline = 'alphabetic';
+    g.fillText(numOf(s), 26, 350);
+    g.fillStyle = '#F2EDE4'; g.font = '600 38px Manrope';
+    g.fillText(s.name, 96, 340, 390);
+    g.fillStyle = 'rgba(242,237,228,.6)'; g.font = '600 20px Manrope';
+    g.fillText(groupName(s.group).toUpperCase(), 98, 374, 390);
+    const mat = spriteMat(canvasTex(c));
+    mat.opacity = 0;
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, width * 400 / 512), mat);
+    mesh.position.copy(dirFrom(i * step, pitch, MENU_R));
+    mesh.lookAt(0, 0, 0);
+    mesh.renderOrder = 20;
+    mesh.userData = { root: mesh, action: () => goTo(s.id), sceneId: s.id, hover: 0, angle: i * step };
+    menuPanels[i] = mesh;
+    menu.add(mesh);
+  }));
+  // medalhão no nadir
+  const c = document.createElement('canvas'); c.width = c.height = 512;
+  const g = c.getContext('2d');
+  g.beginPath(); g.arc(256, 256, 250, 0, Math.PI * 2); g.fillStyle = 'rgba(14,13,11,.82)'; g.fill();
+  g.lineWidth = 3; g.strokeStyle = BRASS; g.stroke();
+  g.textAlign = 'center'; g.fillStyle = '#F2EDE4'; g.font = '700 46px Manrope';
+  g.letterSpacing = '18px'; g.fillText(tour.title, 265, 236);
+  g.letterSpacing = '0px'; g.fillStyle = BRASS_HI; g.font = 'italic 400 34px Fraunces';
+  g.fillText('olhe para um ambiente', 256, 300);
+  const nadir = new THREE.Mesh(new THREE.PlaneGeometry(7, 7), spriteMat(canvasTex(c)));
+  nadir.material.opacity = 0;
+  nadir.position.y = -MENU_R;
+  nadir.rotation.x = -Math.PI / 2;
+  nadir.renderOrder = 19;
+  nadir.raycast = noRaycast;
+  nadirPivot.add(nadir);
+}
+
+function updateMenu(dt) {
+  const want = vr.on && view.pitch < (menu.visible ? -30 : -40);
+  if (want && !menu.visible) {
+    // gira o anel para que o próximo ambiente fique logo à frente de quem olha
+    const i = tour.scenes.findIndex((s) => s.id === current?.id);
+    const a = menuPanels[(i + 1) % tour.scenes.length]?.userData.angle ?? 0;
+    menu.rotation.y = (a - view.yaw) * D;
+    nadirPivot.rotation.y = -a * D;
+    menu.visible = true;
+  }
+  menuOpacity = THREE.MathUtils.damp(menuOpacity, want ? 1 : 0, 10, dt / 1000);
+  if (!want && menuOpacity < 0.02) { menu.visible = false; menuOpacity = 0; }
+  for (const m of [...menuPanels, ...nadirPivot.children]) if (m) m.material.opacity = menuOpacity * (m.userData.sceneId === current?.id ? 0.45 : 1);
+}
+
+/* ---------- Mira / gaze ---------- */
+const reticle = new THREE.Group();
+reticle.position.z = -4;
+reticle.visible = false;
+camera.add(reticle);
+const dot = new THREE.Mesh(new THREE.CircleGeometry(0.022, 24), new THREE.MeshBasicMaterial({ color: 0xF2EDE4, transparent: true, depthTest: false }));
+dot.renderOrder = 30;
+const progressMat = new THREE.ShaderMaterial({
+  uniforms: { progress: { value: 0 }, color: { value: new THREE.Color(BRASS_HI) } },
+  vertexShader: 'varying vec2 vP; void main(){ vP = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `uniform float progress; uniform vec3 color; varying vec2 vP;
+    void main(){ float a = atan(vP.x, vP.y); float t = (a < 0.0 ? a + 6.2831853 : a) / 6.2831853;
+      if (t > progress) discard; gl_FragColor = vec4(color, 1.0);
+      #include <colorspace_fragment>
+    }`,
+  transparent: true, depthTest: false, depthWrite: false,
+});
+const track = new THREE.Mesh(new THREE.RingGeometry(0.06, 0.078, 64), new THREE.MeshBasicMaterial({ color: 0xF2EDE4, transparent: true, opacity: 0, depthTest: false }));
+const ring = new THREE.Mesh(new THREE.RingGeometry(0.06, 0.078, 64), progressMat);
+track.renderOrder = ring.renderOrder = 31;
+reticle.add(dot, track, ring);
+
+const raycaster = new THREE.Raycaster();
+const CENTER = new THREE.Vector2(0, 0);
+const gaze = { target: null, t0: 0, cooldownUntil: 0 };
+
+function gazeTargets() {
+  return menu.visible && menuOpacity > 0.6
+    ? [...hotspotHits, ...menuPanels.filter((m) => m && m.userData.sceneId !== current?.id)]
+    : hotspotHits;
+}
+function pick(ndc) {
+  raycaster.setFromCamera(ndc, camera);
+  return raycaster.intersectObjects(gazeTargets(), false)[0]?.object ?? null;
+}
+function setHover(obj, on) { if (obj) obj.userData.root.userData.hoverTarget = on ? 1 : 0; }
+
+function updateGaze(now) {
+  reticle.visible = vr.on;
+  if (!vr.on) { if (gaze.target) setHover(gaze.target, false); gaze.target = null; return; }
+  const obj = pick(CENTER);
+  if (obj !== gaze.target) {
+    setHover(gaze.target, false);
+    gaze.target = obj; gaze.t0 = now;
+    setHover(obj, true);
+  }
+  let p = 0;
+  if (obj && now > gaze.cooldownUntil) {
+    p = (now - Math.max(gaze.t0, gaze.cooldownUntil)) / DWELL_MS;
+    if (p >= 1) { p = 0; activateGaze(now); }
+  }
+  progressMat.uniforms.progress.value = p;
+  track.material.opacity = obj ? 0.25 : 0;
+  dot.scale.setScalar(THREE.MathUtils.damp(dot.scale.x, obj ? 1.5 : 1, 12, 1 / 60));
+}
+function activateGaze(now = performance.now()) {
+  const obj = gaze.target;
+  if (!obj || now < gaze.cooldownUntil) return;
+  gaze.cooldownUntil = now + 1200;
+  setHover(obj, false);
+  gaze.target = null;
+  obj.userData.action();
+}
+
+/* ---------- Navegação entre ambientes ---------- */
+let current = null;
+let navToken = 0;
+const fade = $('#fade');
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function goTo(id, opts = {}) {
+  const s = byId.get(id);
+  if (!s) return;
+  const my = ++navToken;
+  $('#loadbar').classList.add('on');
+  const texP = loadTex(`panos/${id}_4k.jpg`);
+  fade.classList.remove('clear');
+  await sleep(320);
+  let tex;
+  try { tex = await texP; } catch {
+    $('#loadbar').classList.remove('on'); fade.classList.add('clear');
+    toast('Não foi possível carregar este ambiente'); return;
+  }
+  if (my !== navToken) { tex.dispose(); return; }
+  setPanoTexture(tex);
+  current = s;
+  buildHotspots(s);
+  view.yaw = opts.yaw ?? s.initialYaw ?? 0;
+  view.pitch = opts.pitch ?? 0;
+  view.vYaw = view.vPitch = 0;
+  if (gyro.on) gyro.recenter = true;
+  updateChrome(s);
+  history.replaceState(null, '', `${location.search}#${id}`);
+  requestAnimationFrame(() => requestAnimationFrame(() => fade.classList.add('clear')));
+  $('#loadbar').classList.remove('on');
+  if (!opts.silent) showCaption(s);
+  preloadNeighbors(s);
+  if (useHiRes) {
+    loadTex(`panos/${id}_8k.jpg`, false).then((t) => { if (my === navToken) setPanoTexture(t); else t.dispose(); }).catch(() => {});
+  }
+  editor?.refresh();
+}
+
+function preloadNeighbors(s) {
+  const i = tour.scenes.indexOf(s);
+  const ids = new Set([...s.hotspots.map((h) => h.to), tour.scenes[i + 1]?.id, tour.scenes[i - 1]?.id]);
+  for (const id of ids) if (id) new Image().src = `panos/${id}_4k.jpg`;
+}
+
+/* ---------- Interface ---------- */
+let activeTab = null;
+function renderTabs() {
+  const tabs = $('#tabs');
+  tabs.innerHTML = '';
+  for (const g of tour.groups) {
+    const n = tour.scenes.filter((s) => s.group === g.id).length;
+    const b = document.createElement('button');
+    b.className = 'tab'; b.role = 'tab';
+    b.setAttribute('aria-selected', String(g.id === activeTab));
+    b.innerHTML = `${g.name}<span class="count">${n}</span>`;
+    b.onclick = () => { activeTab = g.id; renderTabs(); renderStrip(); };
+    tabs.appendChild(b);
+  }
+}
+function renderStrip() {
+  const strip = $('#strip');
+  strip.innerHTML = '';
+  for (const s of tour.scenes.filter((x) => x.group === activeTab)) {
+    const b = document.createElement('button');
+    b.className = 'card' + (s.id === current?.id ? ' current' : '');
+    b.innerHTML = `<img src="panos/${s.id}_thumb.jpg" alt="" loading="lazy" draggable="false"><span class="meta"><span class="num">${numOf(s)}</span><span class="nm"></span></span>`;
+    b.querySelector('.nm').textContent = s.name;
+    b.onclick = () => { if (s.id !== current?.id) goTo(s.id); };
+    strip.appendChild(b);
+  }
+}
+function updateChrome(s) {
+  $('#whereGroup').textContent = groupName(s.group);
+  $('#whereName').textContent = s.name;
+  document.title = `${s.name} · ${groupName(s.group)} — ${tour.title}`;
+  activeTab = s.group;
+  renderTabs(); renderStrip();
+}
+function showCaption(s) {
+  if (vr.on) return;
+  const c = $('#caption');
+  c.querySelector('.cap-group').textContent = groupName(s.group);
+  c.querySelector('.cap-name').textContent = s.name;
+  c.classList.remove('show'); void c.offsetWidth; c.classList.add('show');
+}
+let toastTimer;
+function toast(msg, ms = 2600) {
+  const t = $('#toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), ms);
+}
+function setDrawer(open) {
+  document.body.classList.toggle('drawer-closed', !open);
+  $('#btnRooms').classList.toggle('on', open);
+  $('#btnRooms').setAttribute('aria-expanded', String(open));
+}
+$('#btnRooms').onclick = () => setDrawer(document.body.classList.contains('drawer-closed'));
+$('#btnFs').onclick = () => {
+  if (document.fullscreenElement) document.exitFullscreen?.();
+  else document.documentElement.requestFullscreen?.().catch(() => toast('Tela cheia indisponível neste navegador'));
+};
+$('#hintText').textContent = isTouch ? 'Arraste para explorar ou mova o celular' : 'Arraste para explorar';
+function dismissHint() { $('#hint').classList.add('gone'); }
+setTimeout(dismissHint, 7000);
+
+/* ---------- Mouse / toque ---------- */
+const stage = $('#stage');
+const pointers = new Map();
+let drag = null, pinch = null;
+
+function ndcOf(e) {
+  return new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+}
+stage.addEventListener('pointerdown', (e) => {
+  if (vr.on) { openVrMenu(); return; }
+  stage.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  view.lastInput = performance.now();
+  dismissHint();
+  if (pointers.size === 1) {
+    drag = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t0: performance.now(), lastT: performance.now() };
+    view.vYaw = view.vPitch = 0;
+    stage.classList.add('dragging');
+  } else if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    pinch = { dist: Math.hypot(a.x - b.x, a.y - b.y), fov: view.fov };
+    drag = null;
+  }
+});
+stage.addEventListener('pointermove', (e) => {
+  if (vr.on) return;
+  if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinch && pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    view.fov = THREE.MathUtils.clamp(pinch.fov * pinch.dist / Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), 30, 95);
+    return;
+  }
+  if (drag) {
+    const k = view.fov / innerHeight;
+    const dx = (e.clientX - drag.x) * k, dy = (e.clientY - drag.y) * k;
+    const now = performance.now(), dt = Math.max(1, now - drag.lastT);
+    if (gyro.on) gyro.offset -= dx;
+    else { view.yaw -= dx; view.pitch = THREE.MathUtils.clamp(view.pitch + dy, -85, 85); }
+    view.vYaw = THREE.MathUtils.lerp(view.vYaw, -dx / dt, 0.5);
+    view.vPitch = THREE.MathUtils.lerp(view.vPitch, dy / dt, 0.5);
+    drag.x = e.clientX; drag.y = e.clientY; drag.lastT = now;
+    view.lastInput = now;
+    return;
+  }
+  if (e.pointerType === 'mouse') {
+    const hit = pick(ndcOf(e));
+    for (const h of hotspotHits) setHover(h, h === hit);
+    stage.classList.toggle('hovering', !!hit);
+  }
+});
+function endPointer(e) {
+  if (!pointers.has(e.pointerId)) return;
+  pointers.delete(e.pointerId);
+  if (pointers.size < 2) pinch = null;
+  if (drag && pointers.size === 0) {
+    const moved = Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0);
+    const quick = performance.now() - drag.t0 < 450;
+    if (performance.now() - drag.lastT > 80 || gyro.on) view.vYaw = view.vPitch = 0;
+    if (moved < 6 && quick) {
+      view.vYaw = view.vPitch = 0;
+      const hit = pick(ndcOf(e));
+      if (EDIT && editor) editor.onClick(e, hit);
+      else hit?.userData.action();
+    }
+    drag = null;
+  }
+  stage.classList.remove('dragging');
+}
+stage.addEventListener('pointerup', endPointer);
+stage.addEventListener('pointercancel', endPointer);
+stage.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  view.fov = THREE.MathUtils.clamp(view.fov * (1 + e.deltaY * 0.0011), 30, 95);
+  view.lastInput = performance.now();
+}, { passive: false });
+
+addEventListener('keydown', (e) => {
+  if (e.target.closest?.('input, select, textarea')) return;
+  if (vr.on && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); activateGaze(); return; }
+  const step = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] }[e.key];
+  if (step && !vr.on) { view.vYaw = step[0] * 0.09; view.vPitch = step[1] * 0.09; view.lastInput = performance.now(); }
+});
+
+/* ---------- Giroscópio ---------- */
+const zee = new THREE.Vector3(0, 0, 1);
+const qTilt = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
+const qScreen = new THREE.Quaternion();
+const qDev = new THREE.Quaternion();
+const qOffset = new THREE.Quaternion();
+const eul = new THREE.Euler();
+const fwd = new THREE.Vector3();
+const yAxis = new THREE.Vector3(0, 1, 0);
+const screenAngle = () => screen.orientation?.angle ?? window.orientation ?? 0;
+
+function onOrient(e) {
+  if (e.alpha == null && e.beta == null) return;
+  gyro.alpha = e.alpha ?? 0; gyro.beta = e.beta ?? 0; gyro.gamma = e.gamma ?? 0;
+  gyro.has = true;
+}
+function deviceQuat(out) {
+  eul.set(gyro.beta * D, gyro.alpha * D, -gyro.gamma * D, 'YXZ');
+  out.setFromEuler(eul).multiply(qTilt).multiply(qScreen.setFromAxisAngle(zee, -screenAngle() * D));
+  return out;
+}
+async function enableGyro() {
+  if (gyro.on) return true;
+  if (typeof DeviceOrientationEvent === 'undefined') { toast('Este aparelho não tem giroscópio disponível'); return false; }
+  if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+    try { if (await DeviceOrientationEvent.requestPermission() !== 'granted') { toast('Permissão de movimento negada'); return false; } }
+    catch { toast('Permissão de movimento negada'); return false; }
+  }
+  addEventListener('deviceorientation', onOrient);
+  gyro.on = true; gyro.recenter = true; gyro.has = false;
+  $('#btnGyro').classList.add('on');
+  view.vYaw = view.vPitch = 0;
+  setTimeout(() => { if (gyro.on && !gyro.has) toast(location.protocol === 'https:' ? 'Sem sinal do giroscópio' : 'O giroscópio exige HTTPS'); }, 1500);
+  return true;
+}
+function disableGyro() {
+  removeEventListener('deviceorientation', onOrient);
+  gyro.on = false;
+  $('#btnGyro').classList.remove('on');
+}
+$('#btnGyro').onclick = () => (gyro.on ? disableGyro() : enableGyro());
+
+/* ---------- Estéreo (VR) ---------- */
+const rt = new THREE.WebGLRenderTarget(1, 1, { colorSpace: THREE.SRGBColorSpace });
+const quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const lensMat = new THREE.ShaderMaterial({
+  uniforms: { map: { value: rt.texture }, k1: { value: vr.k1 }, k2: { value: vr.k1 * 0.4 }, aspect: { value: 1 } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+  fragmentShader: `uniform sampler2D map; uniform float k1, k2, aspect; varying vec2 vUv;
+    void main(){
+      vec2 q = (vUv * 2.0 - 1.0) * vec2(aspect, 1.0);
+      float r2 = dot(q, q);
+      float e2 = max(aspect, 1.0); e2 *= e2;
+      float d = (1.0 + k1 * r2 + k2 * r2 * r2) / (1.0 + k1 * e2 + k2 * e2 * e2);
+      vec2 s = q * d / vec2(aspect, 1.0) * 0.5 + 0.5;
+      if (any(lessThan(s, vec2(0.0))) || any(greaterThan(s, vec2(1.0)))) gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+      else gl_FragColor = texture2D(map, s);
+      #include <colorspace_fragment>
+    }`,
+  depthTest: false, depthWrite: false,
+});
+const quadScene = new THREE.Scene();
+quadScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), lensMat));
+
+function eyeLayout() {
+  const W = innerWidth, H = innerHeight;
+  const ipd = Math.min(vr.ipd, W * 0.62);
+  return { W, H, ipd, ew: Math.max(1, Math.min(ipd, W - ipd)), eh: H };
+}
+function renderStereo() {
+  const { W, H, ipd, ew, eh } = eyeLayout();
+  const pr = renderer.getPixelRatio();
+  const rw = Math.round(ew * pr), rh = Math.round(eh * pr);
+  if (rt.width !== rw || rt.height !== rh) rt.setSize(rw, rh);
+  camera.aspect = ew / eh;
+  camera.fov = vr.fov;
+  camera.updateProjectionMatrix();
+  lensMat.uniforms.aspect.value = ew / eh;
+  lensMat.uniforms.k1.value = vr.k1;
+  lensMat.uniforms.k2.value = vr.k1 * 0.4;
+
+  renderer.setRenderTarget(rt);
+  renderer.render(world, camera);          // panorama é mono: uma renderização serve aos dois olhos
+  renderer.setRenderTarget(null);
+  renderer.setScissorTest(true);
+  renderer.setViewport(0, 0, W, H); renderer.setScissor(0, 0, W, H);
+  renderer.setClearColor(0x000000, 1); renderer.clear();
+  for (const side of [-1, 1]) {
+    const x = W / 2 + side * ipd / 2 - ew / 2;
+    renderer.setViewport(x, 0, ew, eh); renderer.setScissor(x, 0, ew, eh);
+    renderer.render(quadScene, quadCam);
+  }
+  renderer.setScissorTest(false);
+  renderer.setViewport(0, 0, W, H);
+}
+function applyIpdCss() { document.documentElement.style.setProperty('--ipd', `${eyeLayout().ipd}px`); }
+
+let wakeLock = null;
+async function keepAwake() { try { wakeLock = await navigator.wakeLock?.request('screen'); } catch {} }
+document.addEventListener('visibilitychange', () => { if (vr.on && document.visibilityState === 'visible') keepAwake(); });
+
+let gyroBeforeVr = false;
+let introTimer = null;
+async function enterVR() {
+  try { await document.documentElement.requestFullscreen({ navigationUI: 'hide' }); } catch {}
+  try { await screen.orientation?.lock?.('landscape'); } catch {}
+  gyroBeforeVr = gyro.on;
+  if (!(await enableGyro())) { exitFullscreen(); return; }
+  gyro.recenter = true;
+  keepAwake();
+  vr.on = true;
+  document.body.classList.add('vr');
+  setDrawer(false);
+  applyIpdCss();
+  runIntro();
+}
+function runIntro() {
+  const intro = $('#vrIntro');
+  intro.classList.remove('gone');
+  clearInterval(introTimer);
+  let n = 5;
+  const tick = () => { intro.querySelectorAll('.n').forEach((el) => (el.textContent = n)); };
+  tick();
+  introTimer = setInterval(() => {
+    n -= 1; tick();
+    if (n <= 0) { clearInterval(introTimer); intro.classList.add('gone'); gyro.recenter = true; }
+  }, 1000);
+}
+function exitFullscreen() { if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {}); }
+function exitVR() {
+  if (!vr.on) return;
+  vr.on = false;
+  clearInterval(introTimer);
+  document.body.classList.remove('vr', 'calibrating');
+  $('#vrMenu').hidden = true; $('#calib').hidden = true;
+  try { screen.orientation?.unlock?.(); } catch {}
+  exitFullscreen();
+  wakeLock?.release?.().catch(() => {}); wakeLock = null;
+  if (!gyroBeforeVr) disableGyro();
+  view.pitch = THREE.MathUtils.clamp(view.pitch, -85, 85);
+  onResize();
+}
+function openVrMenu() { if ($('#calib').hidden) $('#vrMenu').hidden = false; }
+$('#btnVR').onclick = enterVR;
+$('#vrResume').onclick = () => { $('#vrMenu').hidden = true; runIntro(); };
+$('#vrExit').onclick = exitVR;
+$('#vrCalib').onclick = () => { $('#vrMenu').hidden = true; openCalib(); };
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && vr.on) exitVR(); });
+
+function openCalib() {
+  $('#calib').hidden = false;
+  document.body.classList.add('calibrating');
+  $('#vrIntro').classList.add('gone');
+  syncCalib();
+}
+function syncCalib() {
+  $('#oIpd').textContent = `${Math.round(vr.ipd)} px`;
+  $('#oFov').textContent = `${vr.fov}°`;
+  $('#oK1').textContent = vr.k1.toFixed(2);
+  applyIpdCss();
+  store.set('vrCalib', { ipd: vr.ipd, fov: vr.fov, k1: vr.k1 });
+}
+$('#calib').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-k]');
+  if (!b) return;
+  const k = b.dataset.k, d = parseFloat(b.dataset.d);
+  const lim = { ipd: [300, 560], fov: [70, 120], k1: [0, 0.6] }[k];
+  vr[k] = THREE.MathUtils.clamp(+(vr[k] + d).toFixed(2), lim[0], lim[1]);
+  syncCalib();
+});
+$('#calReset').onclick = () => { Object.assign(vr, VR_DEFAULTS); syncCalib(); };
+$('#calDone').onclick = () => { $('#calib').hidden = true; document.body.classList.remove('calibrating'); runIntro(); };
+
+// controle Bluetooth / gamepad: botão principal = "clique" no que está na mira
+let padWasDown = false;
+function pollGamepad() {
+  const pads = navigator.getGamepads?.() ?? [];
+  const down = [...pads].some((p) => p?.buttons?.[0]?.pressed);
+  if (down && !padWasDown) activateGaze();
+  padWasDown = down;
+}
+
+/* ---------- Loop ---------- */
+const qView = new THREE.Quaternion();
+let last = performance.now();
+
+function update(dt, now) {
+  if (gyro.on && gyro.has) {
+    deviceQuat(qDev);
+    if (gyro.recenter) {
+      fwd.set(0, 0, -1).applyQuaternion(qDev);
+      gyro.offset = view.yaw - yawPitchOf(fwd).yaw;
+      gyro.recenter = false;
+    }
+    qOffset.setFromAxisAngle(yAxis, -gyro.offset * D);
+    camera.quaternion.copy(qOffset).multiply(qDev);
+    fwd.set(0, 0, -1).applyQuaternion(camera.quaternion);
+    const yp = yawPitchOf(fwd);
+    view.yaw = yp.yaw; view.pitch = yp.pitch;
+  } else {
+    if (!drag) {
+      view.yaw += view.vYaw * dt;
+      view.pitch = THREE.MathUtils.clamp(view.pitch + view.vPitch * dt, -85, 85);
+      const decay = Math.exp(-dt / 200);
+      view.vYaw *= decay; view.vPitch *= decay;
+      if (!isTouch && !EDIT && !reducedMotion && now - view.lastInput > 15000) view.yaw += dt * 0.0035;
+    }
+    camera.quaternion.setFromEuler(eul.set(view.pitch * D, -view.yaw * D, 0, 'YXZ'));
+  }
+  view.yaw = wrap(view.yaw);
+
+  for (const g of hotspotLayer.children) {
+    const u = g.userData;
+    u.hover = THREE.MathUtils.damp(u.hover, u.hoverTarget ?? 0, 12, dt / 1000);
+    g.scale.setScalar(1 + u.hover * 0.18);
+    const t = ((now / 2400 + u.phase) % 1);
+    u.halo.scale.setScalar(reducedMotion ? 1 : 1 + t * 0.7);
+    u.halo.material.opacity = reducedMotion ? 0.4 : (1 - t) * 0.7;
+  }
+  for (const m of menuPanels) {
+    if (!m) continue;
+    m.userData.hover = THREE.MathUtils.damp(m.userData.hover, m.userData.hoverTarget ?? 0, 12, dt / 1000);
+    m.scale.setScalar(1 + m.userData.hover * 0.12);
+  }
+  updateMenu(dt);
+  updateGaze(now);
+  if (vr.on) pollGamepad();
+  editor?.tick();
+}
+
+renderer.setAnimationLoop((now) => {
+  const dt = Math.min(64, now - last);
+  last = now;
+  update(dt, now);
+  if (vr.on) renderStereo();
+  else {
+    camera.fov = view.fov;
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.render(world, camera);
+  }
+});
+
+function onResize() {
+  renderer.setSize(innerWidth, innerHeight);
+  if (vr.on) applyIpdCss();
+}
+addEventListener('resize', onResize);
+screen.orientation?.addEventListener?.('change', () => { onResize(); if (gyro.on) gyro.recenter = true; });
+
+/* ---------- Editor de hotspots (?edit=1) ---------- */
+const editor = EDIT ? createEditor() : null;
+
+function createEditor() {
+  const el = document.createElement('aside');
+  el.id = 'editor';
+  el.innerHTML = `
+    <h3>Editor de hotspots</h3>
+    <div class="live" id="edLive"></div>
+    <button class="btn" id="edInitial">Usar esta vista como inicial</button>
+    <div class="add" id="edAdd">
+      <div class="live" id="edAt"></div>
+      <select id="edTo"></select>
+      <input id="edLabel" placeholder="Rótulo (opcional)">
+      <button class="btn main" id="edSave">Adicionar hotspot</button>
+      <button class="btn" id="edCancel">Cancelar</button>
+    </div>
+    <div>Hotspots deste ambiente</div>
+    <ul id="edList"></ul>
+    <button class="btn main" id="edExport">Baixar tour.json</button>
+    <button class="btn" id="edCopy">Copiar JSON</button>
+    <button class="btn" id="edDiscard">Descartar rascunho</button>
+    <div class="live">Clique num ponto vazio para criar um hotspot. Ao terminar, baixe o tour.json e substitua o do projeto.</div>`;
+  document.body.appendChild(el);
+  const sel = el.querySelector('#edTo');
+  for (const s of tour.scenes) sel.add(new Option(`${numOf(s)} · ${groupName(s.group)} · ${s.name}`, s.id));
+  let pending = null;
+
+  const save = () => store.set('tourDraft', tour);
+  const json = () => JSON.stringify(tour, null, 2);
+  const rebuild = () => { buildHotspots(current); api.refresh(); save(); };
+
+  el.querySelector('#edInitial').onclick = () => { current.initialYaw = Math.round(view.yaw * 10) / 10; save(); toast(`Vista inicial: ${current.initialYaw}°`); api.refresh(); };
+  el.querySelector('#edSave').onclick = () => {
+    if (!pending) return;
+    current.hotspots.push({ to: sel.value, yaw: pending.yaw, pitch: pending.pitch, ...(el.querySelector('#edLabel').value.trim() ? { label: el.querySelector('#edLabel').value.trim() } : {}) });
+    pending = null; el.querySelector('#edAdd').classList.remove('on'); el.querySelector('#edLabel').value = '';
+    rebuild();
+  };
+  el.querySelector('#edCancel').onclick = () => { pending = null; el.querySelector('#edAdd').classList.remove('on'); };
+  el.querySelector('#edExport').onclick = () => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([json()], { type: 'application/json' }));
+    a.download = 'tour.json'; a.click(); URL.revokeObjectURL(a.href);
+  };
+  el.querySelector('#edCopy').onclick = () => navigator.clipboard.writeText(json()).then(() => toast('JSON copiado'), () => toast('Não foi possível copiar'));
+  el.querySelector('#edDiscard').onclick = () => { store.del('tourDraft'); location.reload(); };
+
+  const api = {
+    onClick(e, hit) {
+      if (hit) {
+        const i = hit.userData.hotspotIndex;
+        if (i != null && confirm('Remover este hotspot?')) { current.hotspots.splice(i, 1); rebuild(); }
+        return;
+      }
+      raycaster.setFromCamera(ndcOf(e), camera);
+      const yp = yawPitchOf(raycaster.ray.direction);
+      pending = { yaw: Math.round(yp.yaw * 10) / 10, pitch: Math.round(yp.pitch * 10) / 10 };
+      el.querySelector('#edAt').textContent = `Novo hotspot em yaw ${pending.yaw}°, pitch ${pending.pitch}°`;
+      el.querySelector('#edAdd').classList.add('on');
+      const sameGroup = tour.scenes.find((s) => s.group === current.group && s.id !== current.id);
+      if (sameGroup) sel.value = sameGroup.id;
+    },
+    refresh() {
+      const ul = el.querySelector('#edList');
+      ul.innerHTML = '';
+      current?.hotspots.forEach((h, i) => {
+        const li = document.createElement('li');
+        li.innerHTML = `<span></span><button>remover</button>`;
+        li.firstChild.textContent = `→ ${byId.get(h.to)?.name ?? h.to} (${h.yaw}°, ${h.pitch}°)`;
+        li.lastChild.onclick = () => { current.hotspots.splice(i, 1); rebuild(); };
+        ul.appendChild(li);
+      });
+      if (!current?.hotspots.length) ul.innerHTML = '<li><span>Nenhum ainda</span></li>';
+    },
+    tick() {
+      el.querySelector('#edLive').textContent = `${current?.id ?? ''} · yaw ${view.yaw.toFixed(1)}° · pitch ${view.pitch.toFixed(1)}° · inicial ${current?.initialYaw ?? 0}°`;
+    },
+  };
+  return api;
+}
+
+/* ---------- Início ---------- */
+buildMenu();
+const startId = byId.has(location.hash.slice(1)) ? location.hash.slice(1) : tour.start;
+await goTo(startId);
+if (!isTouch) setTimeout(() => setDrawer(true), 900);
+</script>
+</body>
+</html>
