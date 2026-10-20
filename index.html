@@ -222,6 +222,10 @@ body.calibrating .guide { display: block; }
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="8" y="4" width="8" height="16" rx="2"/><path d="M4.5 8.5a8 8 0 0 0 0 7M19.5 8.5a8 8 0 0 1 0 7"/></svg>
     <span class="tip">Mover o celular</span>
   </button>
+  <button class="ctl primary" id="btnNext" aria-label="Trocar imagem">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0 1 14-5.3L20 9M20 4v5h-5M20 12a8 8 0 0 1-14 5.3L4 15M4 20v-5h5"/></svg>
+    <span id="btnNextLabel">Trocar imagem</span>
+  </button>
   <button class="ctl" id="btnRooms" aria-label="Ambientes" aria-expanded="false">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>
     <span class="tip">Ambientes</span>
@@ -595,7 +599,7 @@ async function goTo(id, opts = {}) {
   if (!s) return;
   const my = ++navToken;
   $('#loadbar').classList.add('on');
-  const texP = loadTex(`panos/${id}_4k.jpg`);
+  const texP = loadTex(s.src ?? `panos/${id}_4k.jpg`);
   fade.classList.remove('clear');
   await sleep(320);
   let tex;
@@ -617,7 +621,7 @@ async function goTo(id, opts = {}) {
   $('#loadbar').classList.remove('on');
   if (!opts.silent) showCaption(s);
   preloadNeighbors(s);
-  if (useHiRes) {
+  if (useHiRes && !s.src) {
     loadTex(`panos/${id}_8k.jpg`, false).then((t) => { if (my === navToken) setPanoTexture(t); else t.dispose(); }).catch(() => {});
   }
   editor?.refresh();
@@ -626,7 +630,7 @@ async function goTo(id, opts = {}) {
 function preloadNeighbors(s) {
   const i = tour.scenes.indexOf(s);
   const ids = new Set([...s.hotspots.map((h) => h.to), tour.scenes[i + 1]?.id, tour.scenes[i - 1]?.id]);
-  for (const id of ids) if (id) new Image().src = `panos/${id}_4k.jpg`;
+  for (const id of ids) if (id) new Image().src = byId.get(id)?.src ?? `panos/${id}_4k.jpg`;
 }
 
 /* ---------- Interface ---------- */
@@ -681,6 +685,10 @@ function setDrawer(open) {
   $('#btnRooms').classList.toggle('on', open);
   $('#btnRooms').setAttribute('aria-expanded', String(open));
 }
+$('#btnNext').onclick = () => {
+  const i = tour.scenes.indexOf(current);
+  goTo(tour.scenes[(i + 1) % tour.scenes.length].id);
+};
 $('#btnRooms').onclick = () => setDrawer(document.body.classList.contains('drawer-closed'));
 $('#btnFs').onclick = () => {
   if (document.fullscreenElement) document.exitFullscreen?.();

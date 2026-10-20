@@ -1,27 +1,12 @@
 {
   "title": "WEEMO",
   "subtitle": "Tour 360°",
-  "start": "01-praca-externa-cam01",
+  "start": "01-teste",
   "groups": [
-    { "id": "comuns", "name": "Áreas comuns" },
-    { "id": "tipo04", "name": "Tipo 04" },
-    { "id": "tipo02", "name": "Tipo 02" },
-    { "id": "cobertura", "name": "Cobertura" }
+    { "id": "testes", "name": "Testes" }
   ],
   "scenes": [
-    { "id": "01-praca-externa-cam01", "group": "comuns", "name": "Praça Externa I", "initialYaw": 0, "hotspots": [] },
-    { "id": "02-praca-externa-cam02", "group": "comuns", "name": "Praça Externa II", "initialYaw": 0, "hotspots": [] },
-    { "id": "03-praca-externa-cam03", "group": "comuns", "name": "Praça Externa III", "initialYaw": 0, "hotspots": [] },
-    { "id": "04-praca-interna", "group": "comuns", "name": "Praça Interna", "initialYaw": 0, "hotspots": [] },
-    { "id": "05-piscina-interna", "group": "comuns", "name": "Piscina Interna", "initialYaw": 0, "hotspots": [] },
-    { "id": "06-sala-tipo-04", "group": "tipo04", "name": "Sala", "initialYaw": 0, "hotspots": [] },
-    { "id": "07-suite-tipo-04", "group": "tipo04", "name": "Suíte", "initialYaw": 0, "hotspots": [] },
-    { "id": "08-sala-tipo-02", "group": "tipo02", "name": "Sala", "initialYaw": 0, "hotspots": [] },
-    { "id": "09-varanda-tipo-02", "group": "tipo02", "name": "Varanda", "initialYaw": 0, "hotspots": [] },
-    { "id": "10-quarto-01-tipo-02", "group": "tipo02", "name": "Quarto 1", "initialYaw": 0, "hotspots": [] },
-    { "id": "11-quarto-02-tipo-02", "group": "tipo02", "name": "Quarto 2", "initialYaw": 0, "hotspots": [] },
-    { "id": "12-suite-tipo-02", "group": "tipo02", "name": "Suíte", "initialYaw": 0, "hotspots": [] },
-    { "id": "13-sala-cobertura-01", "group": "cobertura", "name": "Sala", "initialYaw": 0, "hotspots": [] },
-    { "id": "14-varanda-cobertura-01", "group": "cobertura", "name": "Varanda", "initialYaw": 0, "hotspots": [] }
+    { "id": "01-teste", "group": "testes", "name": "Teste", "src": "teste.png", "initialYaw": 0, "hotspots": [] },
+    { "id": "04-teste4", "group": "testes", "name": "Teste 4", "src": "teste4.jpg", "initialYaw": 0, "hotspots": [] }
   ]
 }
